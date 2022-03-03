@@ -51,7 +51,7 @@ paths:
               hostname:
                 type: string
                 description: "FQDN used in the A and/or PTR records"
-                example: testhost.domain.com
+                example: testhost.example.com
               ptr:
                 type: string
                 description: "Indicates whether or not to create a reverse PTR record. value must be 'yes'"
@@ -109,7 +109,7 @@ paths:
               hostname:
                 type: string
                 description: "FQDN used in the A record to be deleted"
-                example: testhost.domain.com
+                example: testhost.example.com
               delete_ptr:
                 type: string
                 description: "Indicates whether or not to delete a reverse PTR record for the given IP. Value must be 'yes'"
