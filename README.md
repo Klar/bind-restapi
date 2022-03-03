@@ -63,7 +63,7 @@ according to prevent execution of malicious code.
 
 ## API
 
-See the [Swagger Documentation](./swaggger.yml) for the API. For an interactive
+See the [Swagger Documentation](https://klar.github.io/bind-restapi/) for the API. For an interactive
 version with automated generation of example CURL commands, paste the contents
 of the swagger.yml file into the [Online Swagger
 Editor](https://editor.swagger.io/).
