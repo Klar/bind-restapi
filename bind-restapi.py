@@ -64,33 +64,39 @@ mandatory_delete_parameters = ["ip", "hostname"]
 
 # Templates for nsupdate scripts executed by the server. Parameters in curly brackets
 # will be filled in when template is rendered
-nsupdate_create_template = """\
-update add {0} {1} A {2}
-send\
+nsupdate_create_a = """\
+server {0}
+update add {1} {2} A {3}
+send\n\
 """
 
 nsupdate_create_ptr = """\
-update add {0} {1} PTR {2}
-send\
+server {0}
+update add {1} {2} PTR {3}
+send\n\
 """
 
 nsupdate_create_cname = """\
-update add {0} {1} CNAME {2}
-send\
+server {0}
+update add {1} {2} CNAME {3}
+send\n\
 """
 nsupdate_delete_template = """\
-update delete {0} A {1}
-send\
+server {0}
+update delete {1} A {2}
+send\n\
 """
 
 nsupdate_delete_ptr = """\
-update delete {0} PTR {1}
-send\
+server {0}
+update delete {1} PTR {2}
+send\n\
 """
 
 nsupdate_delete_cname = """\
-update delete {0} CNAME {1}
-send\
+server {0}
+update delete {1} CNAME {2}
+send\n\
 """
 
 app_log = logging.getLogger("tornado.application")
@@ -105,7 +111,8 @@ def auth(func):
     def header_check(self, *args, **kwargs):
         secret_header = self.request.headers.get("X-Api-Key", None)
         if not secret_header or not options.secret == secret_header:
-            self.send_error(401, message="X-Api-Key not correct")
+            message='{"error": "X-Api-Key not correct"}'
+            self.send_error(401, message=message)
             raise Finish()
         return func(self, *args, **kwargs)
 
@@ -137,7 +144,7 @@ class JsonHandler(RequestHandler):
                 json_data = json.loads(self.request.body)
                 self.request.arguments.update(json_data)
             except ValueError:
-                message = "Unable to parse JSON."
+                message = '{"error": "Unable to parse JSON."}'
                 self.send_error(400, message=message)  # Bad Request
                 raise Finish()
 
@@ -149,10 +156,9 @@ class JsonHandler(RequestHandler):
         Convenience function for returning error responses to incoming requests 
         """
 
-        reason = self._reason
         if "message" in kwargs:
             reason = kwargs["message"]
-        self.finish(json.dumps({"code": status_code, "message": reason}))
+            self.finish(json.dumps({"code": status_code, "message": reason}))
 
 
 class ValidationMixin:
@@ -177,7 +183,8 @@ class ValidationMixin:
         """
         for parameter in params:
             if parameter not in self.request.arguments:
-                self.send_error(400, message="Parameter %s not found" % parameter)
+                message='{"error": "Parameter {0} not found"}'.format(parameter)
+                self.send_error(400, message=message)
                 raise Finish()
 
 
@@ -193,6 +200,7 @@ class MainHandler(ValidationMixin, JsonHandler):
         print("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
         print("Update type:")
+        print(update)
         print(type(update))
         stdout = p.communicate(input=update.encode())[0]
         return p.returncode, stdout.decode()
@@ -214,11 +222,11 @@ class MainHandler(ValidationMixin, JsonHandler):
         # Loop through nameservers in config file
         error_msg = ""
         for nameserver in options.nameserver:
-            update = nsupdate_create_template.format(hostname, ttl, ip)
+            update = nsupdate_create_a.format(nameserver, hostname, ttl, ip)
             # Create PTR records if asked
             if self.request.arguments.get("ptr") == "yes":
                 reverse_name = reverse_ip(ip)
-                ptr_update = nsupdate_create_ptr.format(reverse_name, ttl, hostname)
+                ptr_update = nsupdate_create_ptr.format(nameserver, reverse_name, ttl, hostname)
                 update += "\n" + ptr_update
             # Create search helper records if asked
             host, domain = hostname.split(".", 1)
@@ -227,7 +235,7 @@ class MainHandler(ValidationMixin, JsonHandler):
                 and domain != options.search_domain
             ):
                 cname = host + "." + options.search_domain.strip(".")
-                cname_update = nsupdate_create_cname.format(cname, ttl, hostname)
+                cname_update = nsupdate_create_cname.format(nameserver, cname, ttl, hostname)
                 update += "\n" + cname_update
 
             return_code, stdout = self._nsupdate(update)
@@ -254,14 +262,14 @@ class MainHandler(ValidationMixin, JsonHandler):
 
         error_msg = ""
         for nameserver in options.nameserver:
-            update = nsupdate_delete_template.format(hostname, ip)
+            update = nsupdate_delete_template.format(nameserver, hostname, ip)
             if self.request.arguments.get("delete_ptr") == "yes":
                 reverse_name = reverse_ip(ip)
-                ptr_update = nsupdate_delete_ptr.format(reverse_name, hostname)
+                ptr_update = nsupdate_delete_ptr.format(nameserver, reverse_name, hostname)
                 update += "\n" + ptr_update
             if self.request.arguments.get("delete_search_cname") == "yes":
                 cname = host + "." + options.search_domain.strip(".")
-                cname_update = nsupdate_delete_cname.format(cname, hostname)
+                cname_update = nsupdate_delete_cname.format(nameserver, cname, hostname)
                 update += "\n" + cname_update
             return_code, stdout = self._nsupdate(update)
             if return_code != 0:
@@ -288,7 +296,7 @@ class DNSApplication(Application):
 
 
 def main():
-    parse_config_file("/etc/bind-api.conf", final=False)
+    parse_config_file(cwd + "/bind-api.conf", final=False)
     parse_command_line(final=True)
 
     # Set up logging
