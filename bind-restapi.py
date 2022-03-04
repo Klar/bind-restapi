@@ -64,24 +64,36 @@ mandatory_delete_parameters = ["ip", "hostname"]
 
 # Templates for nsupdate scripts executed by the server. Parameters in curly brackets
 # will be filled in when template is rendered
+
+# update = nsupdate_create_a.format(nameserver, hostname, ttl, ip)
 nsupdate_create_a = """\
 server {0}
 update add {1} {2} A {3}
 send\n\
 """
 
+# ptr_update = nsupdate_create_ptr.format(nameserver, reverse_name, ttl, hostname)
 nsupdate_create_ptr = """\
 server {0}
 update add {1} {2} PTR {3}
 send\n\
 """
 
+# cname_update = nsupdate_create_cname.format(nameserver, cname, ttl, hostname)
 nsupdate_create_cname = """\
 server {0}
 update add {1} {2} CNAME {3}
 send\n\
 """
-nsupdate_delete_template = """\
+
+# nameserver, hostname, ttl, values
+nsupdate_create_txt = """\
+server {0}
+update add {1} {2} TXT {3}
+send\n\
+"""
+
+nsupdate_delete_a = """\
 server {0}
 update delete {1} A {2}
 send\n\
@@ -183,8 +195,7 @@ class ValidationMixin:
         """
         for parameter in params:
             if parameter not in self.request.arguments:
-                message='{"error": "Parameter {0} not found"}'.format(parameter)
-                self.send_error(400, message=message)
+                self.send_error(400, message="Parameter %s not found" % parameter)
                 raise Finish()
 
 
@@ -262,7 +273,7 @@ class MainHandler(ValidationMixin, JsonHandler):
 
         error_msg = ""
         for nameserver in options.nameserver:
-            update = nsupdate_delete_template.format(nameserver, hostname, ip)
+            update = nsupdate_delete_a.format(nameserver, hostname, ip)
             if self.request.arguments.get("delete_ptr") == "yes":
                 reverse_name = reverse_ip(ip)
                 ptr_update = nsupdate_delete_ptr.format(nameserver, reverse_name, hostname)
