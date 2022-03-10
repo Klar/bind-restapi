@@ -42,6 +42,8 @@ paths:
         - "dns"
       summary: "Create new DNS record"
       operationId: "post"
+      consumes:
+        - "application/json"
       produces:
         - "application/json"
       parameters:
@@ -62,7 +64,7 @@ paths:
           required: true
         - in: body
           name: body
-          description: ""
+          description: "new txt entries"
           schema:
             type: object
             required:
@@ -83,7 +85,7 @@ paths:
               values:
                 type: string
                 description: "TXT values to insert for {recordName}"
-                example: ["my txt entry", "another txt value"]
+                example: "just one string"
       responses:
         "200":
           description: "Record created"
