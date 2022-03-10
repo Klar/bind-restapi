@@ -4,11 +4,11 @@ info:
   version: "1.0.0"
   title: "BIND API"
   contact:
-    email: "https://github.com/klar"
+    email: "a+git@pxd.ch"
   license:
     name: "GPL"
     url: "https://www.gnu.org/licenses/gpl-3.0.en.html"
-host: "example.com"
+host: "127.0.0.1"
 basePath: "/"
 tags:
 - name: "dns"
@@ -23,7 +23,7 @@ paths:
     get:
       tags:
         - "dns"
-      summary: "get bind zones"
+      summary: "GET bind zones"
       operationId: "get"
       produces:
         - "application/json"
@@ -40,7 +40,7 @@ paths:
     post:
       tags:
         - "dns"
-      summary: "Create a new DNS record"
+      summary: "Create new DNS record"
       operationId: "post"
       consumes:
         - "application/json"
@@ -89,12 +89,12 @@ paths:
       responses:
         "200":
           description: "Record created"
-        "500":
-          description: "Unable to create record on nameserver..."
-        "401":
-          description: "X-Api-Key not correct"
         "400":
           description: "We only allow TXT updates."
+        "401":
+          description: "X-Api-Key not correct"
+        "500":
+          description: "Unable to create record on nameserver..."
     delete:
       tags:
         - "dns"
@@ -121,9 +121,9 @@ paths:
       responses:
         "200":
           description: "Record deleted"
-        "500":
-          description: "Unable to delete record using any of the provided nameservers..."
-        "401":
-          description: "X-Api-Key not correct"
         "400":
           description: "URL is not in correct format."
+        "401":
+          description: "X-Api-Key not correct"
+        "500":
+          description: "Unable to delete record using any of the provided nameservers..."
