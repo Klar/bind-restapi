@@ -42,8 +42,6 @@ paths:
         - "dns"
       summary: "Create new DNS record"
       operationId: "post"
-      consumes:
-        - "application/json"
       produces:
         - "application/json"
       parameters:
