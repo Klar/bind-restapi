@@ -239,7 +239,8 @@ class MainHandler(ValidationMixin, JsonHandler):
             substring = ""
             if zone_split[0].find(".arpa") == -1 and zone_split[0].find("localhost") == -1 and zone_split[0] != ".":
                 zoneDict = dict()
-                return_code, nameServers = self._getNameservers(zone_split[0])
+                return_code, nameServers = self._getNameservers(
+                    zone_split[0])  # TODO: set static return
                 nameServers = nameServers.splitlines()
                 zoneDict["id"] = zone_split[0]
                 zoneDict["name"] = zone_split[0]
