@@ -31,7 +31,6 @@ from tornado.options import define, options, parse_command_line, parse_config_fi
 from tornado.httpserver import HTTPServer
 from subprocess import Popen, PIPE, STDOUT
 from tornado.log import LogFormatter
-from icecream import ic
 cwd = os.path.dirname(os.path.realpath(__file__))
 
 # Defines CLI options for the entire module
@@ -181,8 +180,7 @@ class ValidationMixin:
         isDomain = re.compile(
             "([a-z0-9A-Z]\.)*[a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*"
         )
-        fullDomain = recordName + "." + zoneId
-        if not records == "records" or not isDomain.match(fullDomain):
+        if not records == "records" or not isDomain.match(zoneId):
             self.send_error(400, message="URL is not in correct format.")
             raise Finish()
 
@@ -198,11 +196,11 @@ class MainHandler(ValidationMixin, JsonHandler):
         app_log.debug(f"nsupdate script: {update}")
         cmd = "{0} -k {1}".format(options.nsupdate_command, options.sig_key)
         app_log.debug(f"nsupdate cmd: {cmd}")
-        ic("CMD: {}".format(cmd))
+        print("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
-        ic(update)
-        ic(type(update))
-        ic(update.encode())
+        print(update)
+        print(type(update))
+        print(update.encode())
         stdout = p.communicate(input=update.encode())[0]
         return p.returncode, stdout.decode()
 
@@ -211,8 +209,8 @@ class MainHandler(ValidationMixin, JsonHandler):
         Runs 'named-checkconf -l' command in a subprocess.
         """
 
-        cmd = "docker exec bind9-docker_bind9_run_88aceb8d6923 named-checkconf -l"
-        # ic("CMD: {}".format(cmd))
+        cmd = "named-checkconf -l"
+        # print("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
         stdout = p.communicate(input=cmd.encode())[0]
         return p.returncode, stdout.decode()
@@ -223,7 +221,7 @@ class MainHandler(ValidationMixin, JsonHandler):
         """
 
         cmd = "dig NS " + zoneId + " @localhost +short"
-        # ic("CMD: {}".format(cmd))
+        # print("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
         stdout = p.communicate(input=cmd.encode())[0]
         return p.returncode, stdout.decode()
@@ -239,7 +237,7 @@ class MainHandler(ValidationMixin, JsonHandler):
         for zone in zones.splitlines():
             zone_split = zone.split(" ")
             substring = ""
-            if zone_split[0].find(".in-addr.arpa") == -1 and zone_split[0].find("localhost") == -1 and zone_split[0] != ".":
+            if zone_split[0].find(".arpa") == -1 and zone_split[0].find("localhost") == -1 and zone_split[0] != ".":
                 zoneDict = dict()
                 return_code, nameServers = self._getNameservers(zone_split[0])
                 nameServers = nameServers.splitlines()
@@ -248,7 +246,7 @@ class MainHandler(ValidationMixin, JsonHandler):
                 zoneDict["nameServers"] = nameServers
                 zoneReply.append(zoneDict)
 
-        ic(zoneReply)
+        print(zoneReply)
         self.send_error(200, message=zoneReply)
 
     @auth
