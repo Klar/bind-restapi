@@ -85,7 +85,7 @@ paths:
               values:
                 type: string
                 description: "TXT values to insert for {recordName}"
-                example: "just one string"
+                example: ["just one string"]
       responses:
         "200":
           description: "Record created"
