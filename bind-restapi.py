@@ -1,28 +1,37 @@
 """
+Author: klar
+Contact: https://github.com/klar
+Date: 03/10/2022
+Description:
+    Changed restapi URL to use another format (for keyvault-acmebot).
+    Only able to create and delete TXT records. Able to 'GET' the full zone
+    from the nameserver via 'named-checkconf' command.
+
 Author: Kyle Robertson
 Contact: kyle.robertson@wei.com
 Date: 9/8/2020
 Description:
-    This file defines code for a RESTful API server using the Tornado web framework that
-    allows a user to create and delete A, PTR, and CNAME records within BIND DNS
-    infrastructure by making HTTP(S) requests against this server. The server translates
-    the parameters of the users request and uses nsupdate under the hood to make the
-    actual DNS modifications. The server in it's entirety can by run with `python3 bind-restapi.py` 
+    This file defines code for a RESTful API server using the Tornado web
+    framework that allows a user to create and delete A, PTR, and CNAME records
+    within BIND DNS infrastructure by making HTTP(S) requests against this
+    server. The server translates the parameters of the users request and uses
+    nsupdate under the hood to make the actual DNS modifications.
+    The server in it's entirety can by run with `python3 bind-restapi.py`
 """
 
 import json
 import os
-import sys
 import shlex
 import ssl
 import logging
+import re
 from tornado.ioloop import IOLoop
 from tornado.web import url, RequestHandler, Application, Finish
 from tornado.options import define, options, parse_command_line, parse_config_file
 from tornado.httpserver import HTTPServer
 from subprocess import Popen, PIPE, STDOUT
 from tornado.log import LogFormatter
-
+from icecream import ic
 cwd = os.path.dirname(os.path.realpath(__file__))
 
 # Defines CLI options for the entire module
@@ -31,8 +40,9 @@ define("port", default=9999, type=int, help="Listen on port")
 define(
     "logfile", default=os.path.join(cwd, "bind-restapi.log"), type=str, help="Log file"
 )
-define("ttl", default="8640", type=int, help="Default TTL")
-define("nameserver", default=["127.0.0.1"], type=list, help="List of DNS servers")
+define("ttl", default="60", type=int, help="Default TTL")
+define("nameserver", default=["127.0.0.1"],
+       type=list, help="List of DNS servers")
 define(
     "sig_key",
     default=os.path.join(cwd, "dnssec_key.private"),
@@ -50,64 +60,23 @@ define(
     type=str,
     help="Path to cert key",
 )
-define(
-    "search_domain",
-    default="mathworks.com",
-    type=str,
-    help="Domain in which to create search helper CNAME records. Don't include leading dot",
-)
 
-# Mandatory parameters that must be present in the incoming JSON body of create (POST)
-# and delete (DELETE) requests
-mandatory_create_parameters = ["ip", "hostname"]
-mandatory_delete_parameters = ["ip", "hostname"]
+# Mandatory parameters that must be present in the incoming JSON body
+# of create (POST)and delete (DELETE) requests
+mandatory_create_parameters = ["type", "ttl", "values"]
 
-# Templates for nsupdate scripts executed by the server. Parameters in curly brackets
-# will be filled in when template is rendered
+# Templates for nsupdate scripts executed by the server.
+# Parameters in curly brackets will be filled in when template is rendered
 
-# update = nsupdate_create_a.format(nameserver, hostname, ttl, ip)
-nsupdate_create_a = """\
-server {0}
-update add {1} {2} A {3}
-send\n\
-"""
-
-# ptr_update = nsupdate_create_ptr.format(nameserver, reverse_name, ttl, hostname)
-nsupdate_create_ptr = """\
-server {0}
-update add {1} {2} PTR {3}
-send\n\
-"""
-
-# cname_update = nsupdate_create_cname.format(nameserver, cname, ttl, hostname)
-nsupdate_create_cname = """\
-server {0}
-update add {1} {2} CNAME {3}
-send\n\
-"""
-
-# nameserver, hostname, ttl, values
 nsupdate_create_txt = """\
 server {0}
 update add {1} {2} TXT {3}
 send\n\
 """
 
-nsupdate_delete_a = """\
+nsupdate_delete_txt = """\
 server {0}
-update delete {1} A {2}
-send\n\
-"""
-
-nsupdate_delete_ptr = """\
-server {0}
-update delete {1} PTR {2}
-send\n\
-"""
-
-nsupdate_delete_cname = """\
-server {0}
-update delete {1} CNAME {2}
+update delete {1} TXT
 send\n\
 """
 
@@ -116,14 +85,14 @@ app_log = logging.getLogger("tornado.application")
 
 def auth(func):
     """
-    Decorator to check headers for API key and authorize incoming requests. This should
-    wrap all HTTP handler methods in the MainHandler class.
+    Decorator to check headers for API key and authorize incoming requests.
+    This should wrap all HTTP handler methods in the MainHandler class.
     """
 
     def header_check(self, *args, **kwargs):
         secret_header = self.request.headers.get("X-Api-Key", None)
         if not secret_header or not options.secret == secret_header:
-            message='{"error": "X-Api-Key not correct"}'
+            message = '{"error": "X-Api-Key not correct"}'
             self.send_error(401, message=message)
             raise Finish()
         return func(self, *args, **kwargs)
@@ -131,11 +100,17 @@ def auth(func):
     return header_check
 
 
-def reverse_ip(ip):
+def splitUrl(path):
     """
-    Creates the reverse lookup record name given an IP address
+    Split the url / path we receive, send back the values.
     """
-    return ".".join(reversed(ip.split("."))) + ".in-addr.arpa"
+    # split parameters
+    path = path.split("/")
+    zoneId = path[0]
+    records = path[1]
+    recordName = path[2]
+
+    return zoneId, records, recordName
 
 
 class JsonHandler(RequestHandler):
@@ -165,7 +140,7 @@ class JsonHandler(RequestHandler):
 
     def write_error(self, status_code, **kwargs):
         """
-        Convenience function for returning error responses to incoming requests 
+        Convenience function for returning error responses to incoming requests
         """
 
         if "message" in kwargs:
@@ -195,8 +170,23 @@ class ValidationMixin:
         """
         for parameter in params:
             if parameter not in self.request.arguments:
-                self.send_error(400, message="Parameter %s not found" % parameter)
+                self.send_error(
+                    400, message="Parameter %s not found" % parameter)
                 raise Finish()
+
+    def validate_path(self, path):
+        zoneId, records, recordName = splitUrl(path)
+
+        # check if url / sub-domain is in correct format.
+        isDomain = re.compile(
+            "([a-z0-9A-Z]\.)*[a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*"
+        )
+        fullDomain = recordName + "." + zoneId
+        if not records == "records" or not isDomain.match(fullDomain):
+            self.send_error(400, message="URL is not in correct format.")
+            raise Finish()
+
+        return zoneId, records, recordName
 
 
 class MainHandler(ValidationMixin, JsonHandler):
@@ -208,80 +198,122 @@ class MainHandler(ValidationMixin, JsonHandler):
         app_log.debug(f"nsupdate script: {update}")
         cmd = "{0} -k {1}".format(options.nsupdate_command, options.sig_key)
         app_log.debug(f"nsupdate cmd: {cmd}")
-        print("CMD: {}".format(cmd))
+        ic("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
-        print("Update type:")
-        print(update)
-        print(type(update))
+        ic(update)
+        ic(type(update))
+        ic(update.encode())
         stdout = p.communicate(input=update.encode())[0]
         return p.returncode, stdout.decode()
 
+    def _getZones(self):
+        """
+        Runs 'named-checkconf -l' command in a subprocess.
+        """
+
+        cmd = "docker exec bind9-docker_bind9_run_88aceb8d6923 named-checkconf -l"
+        # ic("CMD: {}".format(cmd))
+        p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
+        stdout = p.communicate(input=cmd.encode())[0]
+        return p.returncode, stdout.decode()
+
+    def _getNameservers(self, zoneId):
+        """
+        Runs 'dig' command in a subprocess to get nameservers.
+        """
+
+        cmd = "dig NS " + zoneId + " @localhost +short"
+        # ic("CMD: {}".format(cmd))
+        p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
+        stdout = p.communicate(input=cmd.encode())[0]
+        return p.returncode, stdout.decode()
+
     @auth
-    def post(self):
+    def get(self):
+        """
+        get DNS zones for authorized GET requests.
+        """
+
+        return_code, zones = self._getZones()
+        zoneReply = list()
+        for zone in zones.splitlines():
+            zone_split = zone.split(" ")
+            # TODO: the 'not in' should be made different! depends on bind server output. i.e unschoen
+            if zone_split[0] not in ["1.168.192.in-addr.arpa", ".", "localhost", "127.in-addr.arpa", "0.in-addr.arpa", "255.in-addr.arpa"]:
+                zoneDict = dict()
+                ic(zone_split[0])
+                return_code, nameServers = self._getNameservers(zone_split[0])
+                nameServers = nameServers.splitlines()
+                zoneDict["id"] = zone_split[0]  # TODO: what is the id?
+                zoneDict["name"] = zone_split[0]
+                zoneDict["nameServers"] = nameServers
+                zoneReply.append(zoneDict)
+
+        ic(zoneReply)
+        self.send_error(200, message=zoneReply)
+
+    @auth
+    def post(self, path):
         """
         Creates DNS records for authorized POST requests.
         """
+
         # Validate we have correct parameters in request body
         self.validate_params(mandatory_create_parameters)
+
+        # Validate that path is correct
+        zoneId, records, recordName = self.validate_path(path)
+
         # Extract parameters
-        ip = self.request.arguments["ip"]
-        hostname = self.request.arguments["hostname"]
+        type = self.request.arguments["type"]
+        if type != "TXT":
+            self.send_error(
+                400, message="We only allow TXT updates.")
+            raise Finish()
+
         ttl = options.ttl
         override_ttl = self.request.arguments.get("ttl")
         if override_ttl:
             ttl = int(override_ttl)
+        values = self.request.arguments["values"]
+
         # Loop through nameservers in config file
         error_msg = ""
+        update = ""
         for nameserver in options.nameserver:
-            update = nsupdate_create_a.format(nameserver, hostname, ttl, ip)
-            # Create PTR records if asked
-            if self.request.arguments.get("ptr") == "yes":
-                reverse_name = reverse_ip(ip)
-                ptr_update = nsupdate_create_ptr.format(nameserver, reverse_name, ttl, hostname)
-                update += "\n" + ptr_update
-            # Create search helper records if asked
-            host, domain = hostname.split(".", 1)
-            if (
-                self.request.arguments.get("search_cname") == "yes"
-                and domain != options.search_domain
-            ):
-                cname = host + "." + options.search_domain.strip(".")
-                cname_update = nsupdate_create_cname.format(nameserver, cname, ttl, hostname)
-                update += "\n" + cname_update
+            for value in values:
+                update += nsupdate_create_txt.format(
+                    nameserver, recordName + "." + zoneId, ttl, value)
 
             return_code, stdout = self._nsupdate(update)
             if return_code != 0:
-                msg = f"Unable to create record on nameserver {nameserver}.\nReturncode: {return_code}\nMsg: {stdout}"
+                msg = f"Unable to create record on nameserver {nameserver}.\n\
+                        Returncode: {return_code}\nMsg: {stdout}"
                 app_log.error(msg)
                 error_msg += msg
             else:
                 self.send_error(200, message="Record created")
                 break
         else:
-            msg = f"Unable to create record using any of the provided nameservers: {options.nameserver}"
+            msg = f"Unable to create record using any of the provided\
+                    nameservers: {options.nameserver}"
             app_log.error(msg)
             app_log.error(error_msg)
             self.send_error(500, message=msg + error_msg)
 
     @auth
-    def delete(self):
-        self.validate_params(mandatory_delete_parameters)
+    def delete(self, path):
+        """
+        deletes DNS txt record for authorized DELETE requests.
+        """
 
-        hostname = self.request.arguments["hostname"]
-        ip = self.request.arguments["ip"]
-        host, domain = hostname.split(".", 1)
+        # Validate that path is correct
+        zoneId, records, recordName = self.validate_path(path)
 
         error_msg = ""
         for nameserver in options.nameserver:
-            update = nsupdate_delete_a.format(nameserver, hostname, ip)
-            if self.request.arguments.get("delete_ptr") == "yes":
-                reverse_name = reverse_ip(ip)
-                ptr_update = nsupdate_delete_ptr.format(nameserver, reverse_name, hostname)
-                update += "\n" + ptr_update
-            if self.request.arguments.get("delete_search_cname") == "yes":
-                cname = host + "." + options.search_domain.strip(".")
-                cname_update = nsupdate_delete_cname.format(nameserver, cname, hostname)
-                update += "\n" + cname_update
+            update = nsupdate_delete_txt.format(
+                nameserver, recordName + "." + zoneId, )
             return_code, stdout = self._nsupdate(update)
             if return_code != 0:
                 msg = f"Unable to update nameserver {nameserver}.\nReturncode: {return_code}\nMsg: {stdout}"
@@ -298,11 +330,17 @@ class MainHandler(ValidationMixin, JsonHandler):
 
 
 class DNSApplication(Application):
+
     def __init__(self):
-        # Sets up handler classes for each allowed route. 
+        # Sets up handler classes for each allowed route.
         # Structure should be a list of url objects whose arguents are:
-        # (regex for matching route, RequestHandler object, args for RequestHandler.initialize)
-        handlers = [url(r"/dns", MainHandler)]
+        # (regex for matching route, RequestHandler object,
+        # args for RequestHandler.initialize)
+        handlers = [
+            url(r"/zones/(.*?)/?", MainHandler),
+            url(r"/zones/?", MainHandler)
+        ]
+
         Application.__init__(self, handlers)
 
 
@@ -328,13 +366,6 @@ def main():
     server = HTTPServer(app, ssl_options=ssl_ctx)
     server.listen(options.port, options.address)
     IOLoop.instance().start()
-
-    # Run multiple instances of the application in multiple processes
-    # app = DNSApplication()
-    # server = tornado.httpserver.HTTPServer(app)
-    # server.bind(8888)
-    # server.start(0)  # forks one process per cpu
-    # IOLoop.current().start()
 
 
 if __name__ == "__main__":
