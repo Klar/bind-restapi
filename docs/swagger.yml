@@ -36,7 +36,6 @@ paths:
       responses:
         "200":
           description: "named-checkconf -l in json format"
-
   /zones/{zoneId}/records/{recordName}:
     post:
       tags:
@@ -93,7 +92,7 @@ paths:
         "500":
           description: "Unable to create record on nameserver..."
         "401":
-          description: "{"error": "X-Api-Key not correct"}"
+          description: "X-Api-Key not correct"
         "400":
           description: "We only allow TXT updates."
     delete:
@@ -125,6 +124,6 @@ paths:
         "500":
           description: "Unable to delete record using any of the provided nameservers..."
         "401":
-          description: "{"error": "X-Api-Key not correct"}"
+          description: "X-Api-Key not correct"
         "400":
           description: "URL is not in correct format."
