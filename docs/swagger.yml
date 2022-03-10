@@ -1,30 +1,48 @@
 swagger: "2.0"
 info:
-  description: "A RESTful API server for creating and deleting records in BIND DNS"
+  description: "A RESTful API server for creating and deleting TXT records in BIND DNS"
   version: "1.0.0"
   title: "BIND API"
   contact:
-    email: "sbuedenb@mathworks.com"
+    email: "https://github.com/klar"
   license:
     name: "GPL"
     url: "https://www.gnu.org/licenses/gpl-3.0.en.html"
-host: "dnsapi-ah.mathworks.com"
+host: "example.com"
 basePath: "/"
 tags:
 - name: "dns"
   description: "All DNS related functionality"
   externalDocs:
     description: "Git repo"
-    url: "https://github.com/kwrobert/bind-restapi"
+    url: "https://github.com/Klar/bind-restapi"
 schemes:
 - "https"
 paths:
-  /dns:
+  /zones:
+    get:
+      tags:
+        - "dns"
+      summary: "get bind zones"
+      operationId: "get"
+      produces:
+        - "application/json"
+      parameters:
+        - in: header
+          name: "X-Api-Key"
+          type: string
+          description: "The API key used to authorize the request"
+          required: true
+      responses:
+        "200":
+          description: "named-checkconf -l in json format"
+
+  /zones/{zoneId}/records/{recordName}:
     post:
       tags:
         - "dns"
       summary: "Create a new DNS record"
-      operationId: ""
+      operationId: "post"
       consumes:
         - "application/json"
       produces:
@@ -35,99 +53,78 @@ paths:
           type: string
           description: "The API key used to authorize the request"
           required: true
+        - name: zoneId
+          in: path
+          description: zoneId i.e example.com
+          type: string
+          required: true
+        - name: recordName
+          in: path
+          description: recordName i.e test
+          type: string
+          required: true
         - in: body
           name: body
           description: ""
           schema:
             type: object
             required:
-              - hostname
-              - ip
+              - type
+              - ttl
+              - values
             properties:
-              ip:
+              type:
                 type: string
-                description: "IP address used in the A and/or PTR records"
-                example: 192.168.1.100
-              hostname:
-                type: string
-                description: "FQDN used in the A and/or PTR records"
-                example: testhost.example.com
-              ptr:
-                type: string
-                description: "Indicates whether or not to create a reverse PTR record. value must be 'yes'"
+                description: "Type which must always be TXT"
                 enum: 
-                  - yes
-                example: yes
-              search_cname:
-                type: string
-                description: "Indicates whether or not to create a search helper CNAME in the search domain configured for the API server. Value must be 'yes'"
-                enum: 
-                  - yes
-                example: yes
+                  - TXT
+                example: TXT
               ttl:
                 type: integer
                 description: "Overrides default TTL of all records created in this request with provided value"
-                example: 86400
+                example: 60
+              values:
+                type: string
+                description: "TXT values to insert for {recordName}"
+                example: ["my txt entry", "another txt value"]
       responses:
         "200":
-          description: "Record created successfully"
+          description: "Record created"
         "500":
-          description: "Unable to create the DNS record"
+          description: "Unable to create record on nameserver..."
         "401":
-          description: "Unauthorized due to incorrect X-API-Key header"
+          description: "{"error": "X-Api-Key not correct"}"
         "400":
-          description: "Malformed JSON in request or incorrect parameters in body"
+          description: "We only allow TXT updates."
     delete:
       tags:
-      - "dns"
-      summary: "Delete an existing DNS record"
-      description: ""
-      operationId: ""
-      consumes:
-      - "application/json"
+        - "dns"
+      summary: "Delete DNS records TXT entries"
+      operationId: "delete"
       produces:
-      - "application/json"
+        - "application/json"
       parameters:
         - in: header
           name: "X-Api-Key"
           type: string
           description: "The API key used to authorize the request"
           required: true
-        - in: body
-          name: body
-          description: ""
-          schema:
-            type: object
-            required:
-              - hostname
-              - ip
-            properties:
-              ip:
-                type: string
-                description: "IP address used in the PTR records"
-                example: 192.168.1.100
-              hostname:
-                type: string
-                description: "FQDN used in the A record to be deleted"
-                example: testhost.example.com
-              delete_ptr:
-                type: string
-                description: "Indicates whether or not to delete a reverse PTR record for the given IP. Value must be 'yes'"
-                enum: 
-                  - yes
-                example: yes
-              delete_search_cname:
-                type: string
-                description: "Indicates whether or not to delete a search helper CNAME in the search domain configured for the API server. Value must be 'yes'"
-                enum: 
-                  - yes
-                example: yes
+        - name: zoneId
+          in: path
+          description: zoneId i.e example.com
+          type: string
+          required: true
+        - name: recordName
+          in: path
+          description: recordName i.e test
+          type: string
+          required: true
       responses:
         "200":
-          description: "Record deleted successfully"
+          description: "Record deleted"
         "500":
-          description: "Unable to delete the DNS record"
+          description: "Unable to delete record using any of the provided nameservers..."
         "401":
-          description: "Unauthorized due to incorrect X-API-Key header"
+          description: "{"error": "X-Api-Key not correct"}"
         "400":
-          description: "Malformed JSON in request or incorrect parameters in body"
+          description: "URL is not in correct format."
