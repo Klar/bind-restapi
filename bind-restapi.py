@@ -102,7 +102,7 @@ def auth(func):
 
 def splitUrl(path):
     """
-    Split the url / path we receive, send back the values.
+    Split the url / path we receive, return the values.
     """
     # split parameters
     path = path.split("/")
@@ -238,13 +238,12 @@ class MainHandler(ValidationMixin, JsonHandler):
         zoneReply = list()
         for zone in zones.splitlines():
             zone_split = zone.split(" ")
-            # TODO: the 'not in' should be made different! depends on bind server output. i.e unschoen
-            if zone_split[0] not in ["1.168.192.in-addr.arpa", ".", "localhost", "127.in-addr.arpa", "0.in-addr.arpa", "255.in-addr.arpa"]:
+            substring = ""
+            if zone_split[0].find(".in-addr.arpa") == -1 and zone_split[0].find("localhost") == -1 and zone_split[0] != ".":
                 zoneDict = dict()
-                ic(zone_split[0])
                 return_code, nameServers = self._getNameservers(zone_split[0])
                 nameServers = nameServers.splitlines()
-                zoneDict["id"] = zone_split[0]  # TODO: what is the id?
+                zoneDict["id"] = zone_split[0]
                 zoneDict["name"] = zone_split[0]
                 zoneDict["nameServers"] = nameServers
                 zoneReply.append(zoneDict)
