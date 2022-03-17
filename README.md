@@ -55,7 +55,6 @@ being transmitted in clear text.
 | nsupdate_command | string          | Absolute path to nsupdate binary, if not already on $PATH environment variable    |
 | cert_path        | string          | Absolute path to SSL certificate used by API server                               |
 | cert_key_path    | string          | Absolute path to private key of the SSL certificate used by the API server        |
-| search_domain    | string          | Domain in which to create "search helper" CNAME records for any created A records |
 
 **WARNING:** The configuration file is an executable Python file that is
 imported by the main application code. Manage permissions on this file
