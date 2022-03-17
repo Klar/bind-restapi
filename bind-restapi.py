@@ -299,6 +299,7 @@ class MainHandler(ValidationMixin, JsonHandler):
                 msg = f"Unable to create record on nameserver {nameserver}."
                 app_log.error(stdout)
                 self.send_error(500, message=msg)
+                raise Finish()
             else:
                 self.send_error(200, message="Record created")
                 break
