@@ -200,9 +200,9 @@ class MainHandler(ValidationMixin, JsonHandler):
         app_log.debug(f"nsupdate cmd: {cmd}")
         print("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
-        print(update)
-        print(type(update))
-        print(update.encode())
+        # print(update)
+        # print(type(update))
+        # print(update.encode())
         stdout = p.communicate(input=update.encode())[0]
         return p.returncode, stdout.decode()
 
@@ -296,19 +296,12 @@ class MainHandler(ValidationMixin, JsonHandler):
 
             return_code, stdout = self._nsupdate(update)
             if return_code != 0:
-                msg = f"Unable to create record on nameserver {nameserver}.\n\
-                        Returncode: {return_code}\nMsg: {stdout}"
-                app_log.error(msg)
-                error_msg += msg
+                msg = f"Unable to create record on nameserver {nameserver}."
+                app_log.error(stdout)
+                self.send_error(500, message=msg)
             else:
                 self.send_error(200, message="Record created")
                 break
-        else:
-            msg = f"Unable to create record using any of the provided\
-                    nameservers: {options.nameserver}"
-            app_log.error(msg)
-            app_log.error(error_msg)
-            self.send_error(500, message=msg + error_msg)
 
     @auth
     def delete(self, path):
