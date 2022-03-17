@@ -37,7 +37,7 @@ cwd = os.path.dirname(os.path.realpath(__file__))
 define("address", default="0.0.0.0", type=str, help="Listen on interface")
 define("port", default=9999, type=int, help="Listen on port")
 define(
-    "logfile", default=os.path.join(cwd, "bind-restapi.log"), type=str, help="Log file"
+    "logfile", default=os.path.join("/var/log/bind-restapi.log"), type=str, help="Log file"
 )
 define("ttl", default="60", type=int, help="Default TTL")
 define("nameserver", default=["127.0.0.1"],
@@ -343,7 +343,7 @@ class DNSApplication(Application):
 
 
 def main():
-    parse_config_file(cwd + "/bind-api.conf", final=False)
+    parse_config_file("/etc/bind-api.conf", final=False)
     parse_command_line(final=True)
 
     # Set up logging
