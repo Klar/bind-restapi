@@ -42,6 +42,8 @@ define(
 define("ttl", default="60", type=int, help="Default TTL")
 define("nameserver", default=["127.0.0.1"],
        type=list, help="List of DNS servers")
+define("get_nameservers", default=[],
+       type=list, help="Hardcoded nameservers for zone, not using dig (faster).")
 define(
     "sig_key",
     default=os.path.join(cwd, "dnssec_key.private"),
@@ -236,18 +238,27 @@ class MainHandler(ValidationMixin, JsonHandler):
         zoneReply = list()
         for zone in zones.splitlines():
             zone_split = zone.split(" ")
-            substring = ""
             if zone_split[0].find(".arpa") == -1 and zone_split[0].find("localhost") == -1 and zone_split[0] != ".":
                 zoneDict = dict()
-                return_code, nameServers = self._getNameservers(
-                    zone_split[0])  # TODO: set static return
-                nameServers = nameServers.splitlines()
                 zoneDict["id"] = zone_split[0]
                 zoneDict["name"] = zone_split[0]
-                zoneDict["nameServers"] = nameServers
+
+                # hardcoded nameservers, no need to use (slow) dig for get return.
+                if options.get_nameservers:
+                    zoneDict["nameServers"] = options.get_nameservers
+                else:
+                    return_code, nameServers = self._getNameservers(
+                        zone_split[0])
+                    if return_code != 0:
+                        msg = f"Unable to get zones: {zone_split[0]} nameserver(s).\n"
+                        app_log.error(msg)
+                    else:
+                        nameServers = nameServers.splitlines()
+                        zoneDict["nameServers"] = nameServers
+
                 zoneReply.append(zoneDict)
 
-        print(zoneReply)
+        # print(zoneReply)
         self.send_error(200, message=zoneReply)
 
     @auth
