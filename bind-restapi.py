@@ -243,14 +243,15 @@ class MainHandler(ValidationMixin, JsonHandler):
                 zoneDict["id"] = zone_split[0]
                 zoneDict["name"] = zone_split[0]
 
-                # hardcoded nameservers, no need to use (slow) dig for get return.
+                # hardcoded nameservers, no need to use (slow) dig for GET return.
                 if options.get_nameservers:
                     zoneDict["nameServers"] = options.get_nameservers
                 else:
                     return_code, nameServers = self._getNameservers(
                         zone_split[0])
                     if return_code != 0:
-                        msg = f"Unable to get zones: {zone_split[0]} nameserver(s).\n"
+                        msg = f"Unable to get zone: {zone_split[0]} nameserver(s)."
+                        # TODO: send_error if zone has a failure?
                         app_log.error(msg)
                     else:
                         nameServers = nameServers.splitlines()
@@ -258,7 +259,6 @@ class MainHandler(ValidationMixin, JsonHandler):
 
                 zoneReply.append(zoneDict)
 
-        # print(zoneReply)
         self.send_error(200, message=zoneReply)
 
     @auth
@@ -287,7 +287,6 @@ class MainHandler(ValidationMixin, JsonHandler):
         values = self.request.arguments["values"]
 
         # Loop through nameservers in config file
-        error_msg = ""
         update = ""
         for nameserver in options.nameserver:
             for value in values:
@@ -313,23 +312,19 @@ class MainHandler(ValidationMixin, JsonHandler):
         # Validate that path is correct
         zoneId, records, recordName = self.validate_path(path)
 
-        error_msg = ""
         for nameserver in options.nameserver:
             update = nsupdate_delete_txt.format(
                 nameserver, recordName + "." + zoneId, )
             return_code, stdout = self._nsupdate(update)
             if return_code != 0:
-                msg = f"Unable to update nameserver {nameserver}.\nReturncode: {return_code}\nMsg: {stdout}"
-                app_log.error(msg)
-                error_msg += msg
+                msg = f"Unable to update nameserver {nameserver}."
+                # Returncode: {return_code}\nMsg: {stdout}
+                app_log.error(stdout)
+                self.send_error(500, message=msg)
+                raise Finish()
             else:
                 self.send_error(200, message="Record deleted")
                 break
-        else:
-            msg = f"Unable to delete record using any of the provided nameservers: {options.nameserver}"
-            app_log.error(msg)
-            app_log.error(error_msg)
-            self.send_error(500, message=msg + error_msg)
 
 
 class DNSApplication(Application):
