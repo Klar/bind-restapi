@@ -35,7 +35,7 @@ paths:
           required: true
       responses:
         "200":
-          description: "named-checkconf -l in json format"
+          description: "'named-checkconf -l' in JSON format"
   /zones/{zoneId}/records/{recordName}:
     post:
       tags:

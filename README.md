@@ -1,6 +1,6 @@
 # bind-restapi
 
-A quick and simple RESTful API to BIND, written in Python/Tornado. Provides the ability to add/remove entries within an existing BIND DNS architecture.
+A quick and simple RESTful API to BIND, written in Python/Tornado. Provides the ability to add/remove TXT entries within an existing BIND DNS architecture.
 
 ## Architecture
 
@@ -45,6 +45,7 @@ being transmitted in clear text.
 | **Parameter**        | **Type**            | **Description**                                                                       |
 |------------------|-----------------|-----------------------------------------------------------------------------------|
 | nameserver       | List of strings | List of IP addresses of nameservers to send updates to                            |
+| get_nameservers  | List of strings | List of hardcoded nameserver names for faster GET response                        |
 | address          | string          | IP address to listen for incoming requests on                                     |
 | port             | integer         | TCP port to listen for incoming requests on                                       |
 | logging          | string          | Logging level. One of "info", "debug", "warn", "error".                           |
