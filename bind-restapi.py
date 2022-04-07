@@ -242,7 +242,6 @@ class MainHandler(ValidationMixin, JsonHandler):
                 zoneDict = dict()
                 zoneDict["id"] = zone_split[0]
                 zoneDict["name"] = zone_split[0]
-
                 # hardcoded nameservers, no need to use (slow) dig for GET return.
                 if options.get_nameservers:
                     zoneDict["nameServers"] = options.get_nameservers
@@ -259,7 +258,7 @@ class MainHandler(ValidationMixin, JsonHandler):
 
                 zoneReply.append(zoneDict)
 
-        self.send_error(200, message=zoneReply)
+        self.finish(json.dumps(zoneReply))
 
     @auth
     def post(self, path):
@@ -276,24 +275,33 @@ class MainHandler(ValidationMixin, JsonHandler):
         # Extract parameters
         type = self.request.arguments["type"]
         if type != "TXT":
+            msg = f"type not TXT: {type}."
+            app_log.error(msg)
             self.send_error(
                 400, message="We only allow TXT updates.")
             raise Finish()
 
-        ttl = options.ttl
-        override_ttl = self.request.arguments.get("ttl")
-        if override_ttl:
-            ttl = int(override_ttl)
-        values = self.request.arguments["values"]
+        # ttl GET & verify 'integer'
+        try:
+            ttl = int(options.ttl)
+            override_ttl = self.request.arguments.get("ttl")
+            if override_ttl:
+                ttl = int(override_ttl)
+        except Exception as e:
+            app_log.error(e)
+            self.send_error(500, message="ttl not an int")
+            raise Finish()
 
         # Loop through nameservers in config file
         update = ""
         for nameserver in options.nameserver:
-            for value in values:
-                update += nsupdate_create_txt.format(
-                    nameserver, recordName + "." + zoneId, ttl, value)
+            # we do not allow space in TXT values so we split
+            values = self.request.arguments["values"]
+            update += nsupdate_create_txt.format(
+                nameserver, recordName + "." + zoneId, ttl, values)
 
             return_code, stdout = self._nsupdate(update)
+
             if return_code != 0:
                 msg = f"Unable to create record on nameserver {nameserver}."
                 app_log.error(stdout)
