@@ -279,8 +279,7 @@ class MainHandler(ValidationMixin, JsonHandler):
         # Extract parameters
         type = self.request.arguments["type"]
         if type != "TXT":
-            msg = f"type not TXT: {type}."
-            app_log.error(msg)
+            app_log.debug(f"type not TXT: {type}.")
             self.send_error(
                 400, message="We only allow TXT updates.")
             raise Finish()
@@ -299,10 +298,9 @@ class MainHandler(ValidationMixin, JsonHandler):
         # Loop through nameservers in config file
         update = ""
         for nameserver in options.nameserver:
-            # we do not allow space in TXT values so we split
             values = self.request.arguments["values"]
             update += nsupdate_create_txt.format(
-                nameserver, recordName + "." + zoneId, ttl, values)
+                nameserver, recordName, ttl, values)
 
             return_code, stdout = self._nsupdate(update)
             
