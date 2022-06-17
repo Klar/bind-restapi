@@ -70,13 +70,11 @@ mandatory_create_parameters = ["type", "ttl", "values"]
 # Parameters in curly brackets will be filled in when template is rendered
 
 nsupdate_create_txt = """\
-server {0}
 update add {1} {2} TXT {3}
 send\n\
 """
 
 nsupdate_delete_txt = """\
-server {0}
 update delete {1} TXT
 send\n\
 """
@@ -97,6 +95,8 @@ def auth(func):
             self.send_error(401, message=message)
             raise Finish()
         return func(self, *args, **kwargs)
+
+    app_log.debug(f"auth:  header_check: {header_check}")
 
     return header_check
 
@@ -176,13 +176,18 @@ class ValidationMixin:
                 raise Finish()
 
     def validate_path(self, path):
+        app_log.debug("validate_path")
         zoneId, records, recordName = splitUrl(path)
-
+        app_log.debug(zoneId)
+        app_log.debug(records)
+        app_log.debug(recordName)
         # check if url / sub-domain is in correct format.
         isDomain = re.compile(
-            "([a-z0-9A-Z]\.)*[a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*"
+            "([a-z0-9A-Z]\.)*[_a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*"
         )
-        if not records == "records" or not isDomain.match(zoneId):
+        app_log.debug(isDomain.match(recordName))
+        if not records == "records" or not isDomain.match(recordName):
+            app_log.debug("URL is not in correct format.")
             self.send_error(400, message="URL is not in correct format.")
             raise Finish()
 
@@ -194,15 +199,11 @@ class MainHandler(ValidationMixin, JsonHandler):
         """
         Runs nsupdate command `update` in a subprocess
         """
-
         app_log.debug(f"nsupdate script: {update}")
-        cmd = "{0} -k {1}".format(options.nsupdate_command, options.sig_key)
+        # cmd = "{0} -4 -k {1}".format(options.nsupdate_command, options.sig_key)
+        cmd = "{0} -l -4".format(options.nsupdate_command)
         app_log.debug(f"nsupdate cmd: {cmd}")
-        print("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
-        # print(update)
-        # print(type(update))
-        # print(update.encode())
         stdout = p.communicate(input=update.encode())[0]
         return p.returncode, stdout.decode()
 
@@ -210,9 +211,8 @@ class MainHandler(ValidationMixin, JsonHandler):
         """
         Runs 'named-checkconf -l' command in a subprocess.
         """
-
+        app_log.debug("_getZones")
         cmd = "named-checkconf -l"
-        # print("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
         stdout = p.communicate(input=cmd.encode())[0]
         return p.returncode, stdout.decode()
@@ -221,9 +221,9 @@ class MainHandler(ValidationMixin, JsonHandler):
         """
         Runs 'dig' command in a subprocess to get nameservers.
         """
+        app_log.debug("_getNameservers")
 
         cmd = "dig NS " + zoneId + " @localhost +short"
-        # print("CMD: {}".format(cmd))
         p = Popen(shlex.split(cmd), stdout=PIPE, stdin=PIPE, stderr=STDOUT)
         stdout = p.communicate(input=cmd.encode())[0]
         return p.returncode, stdout.decode()
@@ -316,17 +316,16 @@ class MainHandler(ValidationMixin, JsonHandler):
         """
         deletes DNS txt record for authorized DELETE requests.
         """
+        app_log.debug("delete")
 
         # Validate that path is correct
         zoneId, records, recordName = self.validate_path(path)
 
         for nameserver in options.nameserver:
-            update = nsupdate_delete_txt.format(
-                nameserver, recordName + "." + zoneId, )
+            update = nsupdate_delete_txt.format( nameserver, recordName )
             return_code, stdout = self._nsupdate(update)
             if return_code != 0:
                 msg = f"Unable to update nameserver {nameserver}."
-                # Returncode: {return_code}\nMsg: {stdout}
                 app_log.error(stdout)
                 self.send_error(500, message=msg)
                 raise Finish()
