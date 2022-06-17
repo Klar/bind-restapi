@@ -233,11 +233,14 @@ class MainHandler(ValidationMixin, JsonHandler):
         """
         get DNS zones for authorized GET requests.
         """
+        app_log.debug("get")
 
         return_code, zones = self._getZones()
         zoneReply = list()
         for zone in zones.splitlines():
+
             zone_split = zone.split(" ")
+
             if zone_split[0].find(".arpa") == -1 and zone_split[0].find("localhost") == -1 and zone_split[0] != ".":
                 zoneDict = dict()
                 zoneDict["id"] = zone_split[0]
@@ -261,10 +264,11 @@ class MainHandler(ValidationMixin, JsonHandler):
         self.finish(json.dumps(zoneReply))
 
     @auth
-    def post(self, path):
+    def put(self, path):
         """
         Creates DNS records for authorized POST requests.
         """
+        app_log.debug("put")
 
         # Validate we have correct parameters in request body
         self.validate_params(mandatory_create_parameters)
@@ -301,13 +305,17 @@ class MainHandler(ValidationMixin, JsonHandler):
                 nameserver, recordName + "." + zoneId, ttl, values)
 
             return_code, stdout = self._nsupdate(update)
-
+            
+            app_log.debug(f"We did run nsupdate: {update}.")
+            app_log.debug(f"stdout: {stdout}.")
+            
             if return_code != 0:
                 msg = f"Unable to create record on nameserver {nameserver}."
                 app_log.error(stdout)
                 self.send_error(500, message=msg)
                 raise Finish()
             else:
+                app_log.debug("success, record created")
                 self.send_error(200, message="Record created")
                 break
 
