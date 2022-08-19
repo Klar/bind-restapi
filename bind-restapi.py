@@ -181,12 +181,14 @@ class ValidationMixin:
         app_log.debug(zoneId)
         app_log.debug(records)
         app_log.debug(recordName)
+
         # check if url / sub-domain is in correct format.
+        # _acme-challenge.testput3.testdomain.com
         isDomain = re.compile(
-            "([a-z0-9A-Z]\.)*[_a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*"
+            "_acme-challenge.[_a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*"
         )
         app_log.debug(isDomain.match(recordName))
-        if not records == "records" or not isDomain.match(recordName):
+        if records != "records" and not isDomain.match(recordName):
             app_log.debug("URL is not in correct format.")
             self.send_error(400, message="URL is not in correct format.")
             raise Finish()
@@ -243,8 +245,11 @@ class MainHandler(ValidationMixin, JsonHandler):
 
             if zone_split[0].find(".arpa") == -1 and zone_split[0].find("localhost") == -1 and zone_split[0] != ".":
                 zoneDict = dict()
-                zoneDict["id"] = zone_split[0]
-                zoneDict["name"] = zone_split[0]
+
+                # replace . with _ for zone id i.e example.com to example_com
+                zoneDict["id"] = zone_split[0][:-1].replace(".", "_")
+                zoneDict["name"] = zone_split[0][:-1]
+
                 # hardcoded nameservers, no need to use (slow) dig for GET return.
                 if options.get_nameservers:
                     zoneDict["nameServers"] = options.get_nameservers
@@ -253,14 +258,16 @@ class MainHandler(ValidationMixin, JsonHandler):
                         zone_split[0])
                     if return_code != 0:
                         msg = f"Unable to get zone: {zone_split[0]} nameserver(s)."
-                        # TODO: send_error if zone has a failure?
                         app_log.error(msg)
+                        self.send_error(
+                            400, message=msg)
                     else:
                         nameServers = nameServers.splitlines()
                         zoneDict["nameServers"] = nameServers
 
                 zoneReply.append(zoneDict)
 
+        app_log.debug(zoneReply)
         self.finish(json.dumps(zoneReply))
 
     @auth
@@ -275,7 +282,6 @@ class MainHandler(ValidationMixin, JsonHandler):
 
         # Validate that path is correct
         zoneId, records, recordName = self.validate_path(path)
-
         # Extract parameters
         type = self.request.arguments["type"]
         if type != "TXT":
@@ -296,17 +302,17 @@ class MainHandler(ValidationMixin, JsonHandler):
             raise Finish()
 
         # Loop through nameservers in config file
-        update = ""
         for nameserver in options.nameserver:
             values = self.request.arguments["values"]
-            update += nsupdate_create_txt.format(
+            # how to stop attack here? i.e mystring\nnsupdate add ....
+            print(values)
+            update = nsupdate_create_txt.format(
                 nameserver, recordName, ttl, values)
 
             return_code, stdout = self._nsupdate(update)
-            
+
             app_log.debug(f"We did run nsupdate: {update}.")
             app_log.debug(f"stdout: {stdout}.")
-            
             if return_code != 0:
                 msg = f"Unable to create record on nameserver {nameserver}."
                 app_log.error(stdout)
@@ -328,7 +334,7 @@ class MainHandler(ValidationMixin, JsonHandler):
         zoneId, records, recordName = self.validate_path(path)
 
         for nameserver in options.nameserver:
-            update = nsupdate_delete_txt.format( nameserver, recordName )
+            update = nsupdate_delete_txt.format(nameserver, recordName )
             return_code, stdout = self._nsupdate(update)
             if return_code != 0:
                 msg = f"Unable to update nameserver {nameserver}."
